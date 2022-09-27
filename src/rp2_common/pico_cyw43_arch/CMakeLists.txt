@@ -24,6 +24,7 @@ if (PICO_CYW43_SUPPORTED) # set by BOARD=pico-w
             target_link_libraries(pico_cyw43_arch_lwip_poll INTERFACE
                     pico_cyw43_arch
                     pico_lwip
+                    pico_wireguard
                     pico_lwip_nosys)
             target_compile_definitions(pico_cyw43_arch_lwip_poll INTERFACE
                     CYW43_LWIP=1
@@ -34,6 +35,7 @@ if (PICO_CYW43_SUPPORTED) # set by BOARD=pico-w
             target_link_libraries(pico_cyw43_arch_lwip_threadsafe_background INTERFACE
                     pico_cyw43_arch
                     pico_lwip
+                    pico_wireguard
                     pico_lwip_nosys)
             target_compile_definitions(pico_cyw43_arch_lwip_threadsafe_background INTERFACE
                     CYW43_LWIP=1
@@ -44,6 +46,7 @@ if (PICO_CYW43_SUPPORTED) # set by BOARD=pico-w
             target_link_libraries(pico_cyw43_arch_lwip_sys_freertos INTERFACE
                     pico_cyw43_arch
                     pico_lwip
+                    pico_wireguard
                     pico_lwip_contrib_freertos)
             target_compile_definitions(pico_cyw43_arch_lwip_sys_freertos INTERFACE
                     CYW43_LWIP=1
