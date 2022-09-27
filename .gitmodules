@@ -7,3 +7,6 @@
 [submodule "lib/lwip"]
 	path = lib/lwip
 	url = https://github.com/lwip-tcpip/lwip.git
+[submodule "lib/wireguard-lwip"]
+	path = lib/wireguard-lwip
+	url = https://github.com/smartalock/wireguard-lwip.git
