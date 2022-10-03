@@ -38,6 +38,8 @@ if (EXISTS ${PICO_WG_LWIP_PATH}/${LWIP_TEST_PATH})
             )
     target_include_directories(pico_wireguard INTERFACE
             ${PICO_WG_LWIP_PATH}/src)
+    target_compile_options(pico_wireguard INTERFACE
+            -DWG_LWIP_USE_CORTEX_M0_CRYPTO)
 
     pico_promote_common_scope_vars()
 endif()
