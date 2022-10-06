@@ -44,7 +44,12 @@ void wireguard_tai64n_now(uint8_t *output) {
 	// 64 bit seconds from 1970 = 8 bytes
 	// 32 bit nano seconds from current second
 
-	uint64_t microsec = to_us_since_boot(get_absolute_time());
+	static uint64_t time_save __attribute__((section(".uninitialized_data"))); // non-resetting time count
+	static uint64_t prev_now = 0ULL;
+	uint64_t now = to_us_since_boot(get_absolute_time()); // microseconds since boot
+	uint64_t diff = now - prev_now; // usec increase since last call, or since boot
+	uint64_t microsec = time_save;
+	time_save += (uint64_t)diff; // increment the non-resetting time by the number of usec since last call (or boot)
 
 	// Split into seconds offset + nanos
 	uint64_t seconds = 0x400000000000000aULL + (microsec / 1000000ULL);
