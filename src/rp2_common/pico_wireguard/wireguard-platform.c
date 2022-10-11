@@ -50,22 +50,7 @@ uint32_t wireguard_sys_now() {
 // across power-off restarts, provided that the RTC remains correct (but that is not our
 // responsibility here).
 static uint64_t datetime_to_seconds(datetime_t *pDateTime) {
-	static const uint16_t vDaysBefore[12] = {
-		0,   // Jan
-		31,  // Feb
-		60,  // Mar, assume leap year
-		91,  // Apr
-		121, // May
-		152, // Jun
-		182, // Jul
-		213, // Aug
-		244, // Sep
-		274, // Oct
-		305, // Nov
-		335, // Dec
-	};
-	const uint16_t years = pDateTime->year - 1970;
-	const uint64_t days = 366*years + vDaysBefore[pDateTime->month - 1] + pDateTime->day - 1;
+	const uint64_t days = 372 *(pDateTime->year - 1970) + 31 * (pDateTime->month - 1) + (pDateTime->day - 1);
 	const uint64_t seconds = ((((days * 24) + pDateTime->hour) * 60) + pDateTime->min) * 60 + pDateTime->sec;
 	return seconds;
 }
@@ -74,19 +59,32 @@ static uint64_t datetime_to_seconds(datetime_t *pDateTime) {
 void wireguard_tai64n_now(uint8_t *output) {
 	// See https://cr.yp.to/libtai/tai64.html
 	// 64 bit seconds from 1970 = 8 bytes
-	// 32 bit nano seconds from current second
-
+	// 32 bit nanoseconds from current second
+	static uint64_t microseconds_base = 0;
+	static uint64_t tai64seconds_base = 0;
+	// If the real-time clock (RTC) is running then we use that as the basis for timestamps.
+	// This allows the timestamps to be monotonically-increasing wrt. absolute time, and hence across
+	// power-off, provided that the RTC is correct (or at least consistent), i.e. that it is either
+	// maintained by battery or initialised from NTP at startup.
 	if (rtc_running()) {
-	    datetime_t t;
-		uint32_t nanos = 0;
-
-        rtc_get_datetime(&t);
-		const uint64_t seconds = datetime_to_seconds(&t);
-
+		const uint64_t microseconds_since_boot = to_us_since_boot(get_absolute_time());
+		if (0u == tai64seconds_base) { // first-time setup
+			datetime_t t;
+			rtc_get_datetime(&t);
+			tai64seconds_base = datetime_to_seconds(&t);
+			microseconds_base = microseconds_since_boot;
+		}
+		// Once we have initialised tai64seconds_base and microseconds_base, above, all time is 
+		// based on the system time (from the 64-bit microsecond counter). This insures that there
+		// is only one source of change, and hence that the timestamp is monotonically increasing.
+		const uint64_t microseconds = microseconds_since_boot - microseconds_base; // usec increment
+		const uint64_t seconds = tai64seconds_base + microseconds / 1000000u;
+		const uint32_t nanos = (microseconds % 1000000) * 1000;
 		U64TO8_BIG(output + 0, seconds);
 		U32TO8_BIG(output + 8, nanos);
 		return;
 	}
+
 	static uint64_t time_save __attribute__((section(".uninitialized_data"))); // non-resetting time count
 	static uint64_t prev_now = 0ULL;
 	uint64_t now = to_us_since_boot(get_absolute_time()); // microseconds since boot
