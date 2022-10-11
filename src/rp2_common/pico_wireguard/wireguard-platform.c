@@ -61,42 +61,36 @@ void wireguard_tai64n_now(uint8_t *output) {
 	// 64 bit seconds from 1970 = 8 bytes
 	// 32 bit nanoseconds from current second
 	static uint64_t microseconds_base = 0;
-	static uint64_t tai64seconds_base = 0;
-	// If the real-time clock (RTC) is running then we use that as the basis for timestamps.
-	// This allows the timestamps to be monotonically-increasing wrt. absolute time, and hence across
-	// power-off, provided that the RTC is correct (or at least consistent), i.e. that it is either
-	// maintained by battery or initialised from NTP at startup.
-	if (rtc_running()) {
-		const uint64_t microseconds_since_boot = to_us_since_boot(get_absolute_time());
-		if (0u == tai64seconds_base) { // first-time setup
+	static uint64_t tai64seconds __attribute__((section(".uninitialized_data"))); // non-resetting time count
+	const uint64_t microseconds_since_boot = to_us_since_boot(get_absolute_time());
+	const uint64_t microseconds = microseconds_since_boot - microseconds_base; // usec increment
+	if (0u == microseconds_base) { // first-time setup
+		microseconds_base = microseconds_since_boot;
+		// If the real-time clock (RTC) is running then we use that as the basis for timestamps.
+		// We assume that the RTC will not be started until it has a valid time.
+		// This allows the timestamps to be monotonically-increasing wrt. absolute time, and hence across
+		// cold reboot, provided that the RTC is correct (or at least consistent), i.e. that it is either
+		// maintained by battery or initialised from NTP at startup.
+		if (rtc_running()) {
+			// Once we have initialised tai64seconds and microseconds_base, here, all time is 
+			// based on the system time (from the 64-bit microsecond counter). This insures that there
+			// is only one source of change, and hence that the timestamp is monotonically increasing.
 			datetime_t t;
 			rtc_get_datetime(&t);
-			tai64seconds_base = datetime_to_seconds(&t);
-			microseconds_base = microseconds_since_boot;
+			tai64seconds = datetime_to_seconds(&t);
+		} else {
+			// The RTC is not running (yet), so all we have to go by is the non-resetting count. If we're
+			// coming out of a cold boot then we're probably stuffed, as the count will be random and hence
+			// there is a high likelihood that timestamps based on it will be rejected by our WireGuard peers.
+			// However, if we're coming out of a warm boot, but the RTC is not yet running, then the non-resetting
+			// count may still be valid from the previous run, so we can keep using (and incrementing) it.
 		}
-		// Once we have initialised tai64seconds_base and microseconds_base, above, all time is 
-		// based on the system time (from the 64-bit microsecond counter). This insures that there
-		// is only one source of change, and hence that the timestamp is monotonically increasing.
-		const uint64_t microseconds = microseconds_since_boot - microseconds_base; // usec increment
-		const uint64_t seconds = tai64seconds_base + microseconds / 1000000u;
-		const uint32_t nanos = (microseconds % 1000000) * 1000;
-		U64TO8_BIG(output + 0, seconds);
-		U32TO8_BIG(output + 8, nanos);
-		return;
 	}
-
-	static uint64_t time_save __attribute__((section(".uninitialized_data"))); // non-resetting time count
-	static uint64_t prev_now = 0ULL;
-	uint64_t now = to_us_since_boot(get_absolute_time()); // microseconds since boot
-	uint64_t diff = now - prev_now; // usec increase since last call, or since boot
-	uint64_t microsec = time_save;
-	time_save += (uint64_t)diff; // increment the non-resetting time by the number of usec since last call (or boot)
-
-	// Split into seconds offset + nanos
-	uint64_t seconds = 0x400000000000000aULL + (microsec / 1000000ULL);
-	uint32_t nanos = (microsec % 1000000) * 1000;
-	U64TO8_BIG(output + 0, seconds);
-	U32TO8_BIG(output + 8, nanos);
+	const uint64_t seconds = microseconds / 1000000ull;
+	tai64seconds += seconds; // increment the non-resetting time by the number of seconds since last call (or boot)
+	microseconds_base += seconds * 1000000u;
+	U64TO8_BIG(output + 0, tai64seconds); // TAI64N seconds
+	U32TO8_BIG(output + 8, (uint32_t)(microseconds % 1000000ull) * 1000ul); // TAI64N nanoseconds
 }
 
 bool wireguard_is_under_load() {
